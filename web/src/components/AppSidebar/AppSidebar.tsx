@@ -17,6 +17,7 @@ import {
   MapIcon,
   MenuIcon,
   PaperclipIcon,
+  RssIcon,
   SearchIcon,
   SquarePenIcon,
   Trash2Icon,
@@ -48,6 +49,7 @@ import { userNamePrefix } from "@/lib/resource-names";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/router/routes";
 import { State } from "@/types/proto/api/v1/common_pb";
+import { InstanceAccessMode } from "@/types/proto/api/v1/instance_service_pb";
 import { User_Role, UserNotification_Status } from "@/types/proto/api/v1/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import MemosLogo from "../MemosLogo";
@@ -354,7 +356,9 @@ const GlobalNavigation = () => {
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const { memoDetail, memoScope, setMemoScope, setMobileOpen, setQuickFindOpen } = useAppSidebar();
+  const { profile } = useInstance();
   const { filters } = useMemoFilterContext();
+  const rssEnabled = profile?.accessMode === InstanceAccessMode.PUBLIC;
   const routeKind = getSidebarRouteKind(location.pathname);
   const resolvedScope = resolveMemoScope(location.pathname, {
     currentUsername: currentUser?.username,
@@ -528,6 +532,18 @@ const GlobalNavigation = () => {
             </Tooltip>
           );
         })}
+        {currentUser && rssEnabled && (
+          <Tooltip>
+            <TooltipTrigger
+              render={<a href="/explore/rss.xml" target="_blank" rel="noreferrer" aria-label="RSS" className={navPillClasses(false)} />}
+            >
+              <span className={SIDEBAR_NAV_LEADING_SLOT_CLASSES} aria-hidden="true">
+                <RssIcon className="size-4 opacity-75" strokeWidth={1.8} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">RSS</TooltipContent>
+          </Tooltip>
+        )}
         {/* Search is a place to go, not a header action: it closes the navigator's row
             so the header keeps only the brand and the bordered compose control. */}
         <Tooltip>
