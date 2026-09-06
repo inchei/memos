@@ -7,6 +7,7 @@ Everything here tracks upstream. The only delta lives on the `with-rss` branch:
 
 - One revert commit — `Revert "refactor(server): remove RSS feed support (#6243)"` — restores the feed service and its tests.
 - One frontend commit adds an RSS entry next to the attachments icon in the sidebar.
+- `scripts/sync-with-rss.sh` replays both on top of every upstream sync.
 
 ## What the patch provides
 
@@ -24,35 +25,37 @@ inchei   git@github.com:inchei/memos.git     # fork, writable
 
 ## Syncing with upstream
 
-`with-rss` is always `main` plus a small number of replayable commits, so a sync is a rebase:
+`with-rss` is always `main` plus a small number of replayable commits. The provided script runs the whole flow:
 
 ```bash
-git checkout main
-git pull origin main                 # fast-forward from upstream
+scripts/sync-with-rss.sh
+```
 
+It fast-forwards `main` from upstream, rebases `with-rss` on top with `-X theirs`, then builds and runs the RSS/markdown tests before force-pushing to the fork. On conflict, `-X theirs` resolves every shared line in favor of the replayed patch — the restored RSS code simply wins, so syncs stay hands-off.
+
+`-X theirs` is syntactic, not semantic. If upstream refactored something the patch hooks into (for example renamed the route group in `server/server.go`), the rebase finishes but `go build` fails; fix that file by hand, `git rebase --continue`, and rerun the script. When you intervene, the goal is always the same: keep the RSS restore, take everything else from `main`.
+
+Manual equivalent:
+
+```bash
+git checkout main && git pull origin main
 git checkout with-rss
-git rebase main                      # replay the RSS patch on top
-
+git rebase main -X theirs
+go build ./... && go test ./server/router/rss/... ./internal/markdown/...
 git push --force-with-lease inchei with-rss
 ```
 
-Check that the delta is still what you expect:
+### Files the patch owns
 
-```bash
-git log --oneline main..with-rss     # should list only the RSS commits
-```
+Conflicts surface in a small, stable set of places:
 
-### When the rebase conflicts
-
-Conflicts happen only where upstream touches the same files the patch does:
-
-| File | Typical conflict |
+| File | Patch side |
 | --- | --- |
-| `server/server.go` | Router wiring moved; re-add the `rss.RegisterRoutes(...)` call next to the other route registrations. |
-| `go.mod` / `go.sum` | Dependency lines shifted; keep `github.com/gorilla/feeds`, then run `go mod tidy -go=1.27.0`. |
-| `internal/markdown/**` | Markdown API changed; adjust the restored render helpers to the new signatures. |
-
-Resolve, then `git rebase --continue`. If the patch grows beyond simple wiring fixes, consider splitting it into more, smaller commits — the rebase replays each one in order.
+| `server/router/rss/rss.go`, `rss_test.go` | Whole files restored from before the removal. |
+| `server/server.go` | Two lines: the `rss` import and `rss.NewRSSService(...).RegisterRoutes(rootGroup)`. |
+| `internal/markdown/**` | RSS-only render helpers (`gfm`, `mention`, `tag` extensions). |
+| `go.mod` / `go.sum` | `github.com/gorilla/feeds`; run `go mod tidy -go=1.27.0` after manual edits. |
+| `web/src/components/AppSidebar/AppSidebar.tsx` | The RSS nav pill beside the attachments icon. |
 
 ## Verify after each sync
 
